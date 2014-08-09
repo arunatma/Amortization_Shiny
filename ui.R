@@ -10,7 +10,7 @@ shinyUI(pageWithSidebar(
         
         textInput("principal", "Principal (Rs)", "100000"),
         textInput("rate", "Rate per Annum (%)", "8"),
-        textInput("period", "Loan Period (years)", "25"),
+        textInput("period", "Loan Period (years)", "10"),
         
         selectInput(
             "cfreq", "Compounding Frequency",
@@ -27,7 +27,7 @@ shinyUI(pageWithSidebar(
                  Weekly = "week",
                  Monthly = "month",
                  Quarterly = "quart",
-                 Annual = "year")),
+                 Annual = "year"), selected = "year"),
                  
         dateInput("cur_date", "Current Date",  language = "en", format = "dd/mm/yyyy"),         
         

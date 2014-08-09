@@ -2,4 +2,9 @@ README.md
 
 Loan Amortization example
 
-Refer Shiny tutorial at http://rstudio.github.io/shiny/tutorial/ on how to install and run Shiny.
+Implemented in R and Shiny
+
+Runs in ShinyApps
+
+At:
+http://arunatma.shinyapps.io/amortization_shiny/

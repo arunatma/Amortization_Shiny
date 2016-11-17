@@ -21,6 +21,15 @@ npvc <- function(cur_date, epi_val, pmt_dates, rate, cfreq){
     return(net_present_value)
 }
 
+getInterest <- function(principal, rate, days, cfreq){
+    if(cfreq == 0){
+        interest <- principal * (exp(rate * days/365.25) - 1)
+    } else {
+        interest <- principal * (((1 + rate/cfreq) ** (days/(365.25/cfreq)))- 1)
+    }
+    return(interest)
+}
+
 compoundingFreq <- function(freqStr){
     return(switch(freqStr,
         conti = 0,
@@ -52,6 +61,7 @@ getAmortTable <- function(principal, rate, period, cur_date, start_date,
     rate <- as.double(rate) / 100
     period <- as.double(period)
     cur_date <- as.Date(cur_date, format = "%d/%m/%Y")
+    cfreq <- compoundingFreq(comp_freq)
     
     start_date <- as.Date(start_date, format = "%d/%m/%Y")
     end_date <- start_date + period * 365.25 - 1
@@ -61,9 +71,9 @@ getAmortTable <- function(principal, rate, period, cur_date, start_date,
     max_epi <- prin
 
     min_npv_val <- npvfn(comp_freq)(cur_date, min_epi, pmt_dates, 
-        rate, compoundingFreq(comp_freq))
+        rate, cfreq)
     max_npv_val <- npvfn(comp_freq)(cur_date, max_epi, pmt_dates, 
-        rate, compoundingFreq(comp_freq))
+        rate, cfreq)
     
     while(abs(min_npv_val - prin) > 0.001){
         mid_epi <- (min_epi + max_epi)/2
@@ -74,26 +84,39 @@ getAmortTable <- function(principal, rate, period, cur_date, start_date,
         if(leftdiff < rightdiff){
             max_epi <- mid_epi
             max_npv_val <- npvfn(comp_freq)(cur_date, max_epi, pmt_dates, rate, 
-                compoundingFreq(comp_freq))
+                cfreq)
         } else {
             min_epi <- mid_epi
             min_npv_val <- npvfn(comp_freq)(cur_date, min_epi, pmt_dates, rate, 
-                compoundingFreq(comp_freq))
+                cfreq)
         }
     }
-    data.frame(Date = pmt_dates, Instalment = rep(mid_epi, length(pmt_dates)))
+    pmt <- mid_epi
+    
     allDates <- c(cur_date, pmt_dates)
-    interestDays <- diff(allDates)
+    interestDays <- as.numeric(diff(allDates))
+    balance <- prin
+    pmtSchedule <- data.frame()
+    for(i in c(1:length(interestDays))){
+        days <- interestDays[i]
+        interest <- getInterest(balance, rate, days, cfreq)
+        paidPrincipal <- pmt - interest
+        balance <- balance - paidPrincipal
+        pmtSchedule <- rbind(pmtSchedule, c(interest, paidPrincipal, balance))
+    }
+    paymentDf <- data.frame(Date = pmt_dates, 
+        Instalment = rep(pmt, length(pmt_dates)))
+        
+    paymentDf <- cbind(paymentDf, pmtSchedule)
+    names(paymentDf) <- c("Date", "Instalment", "Interest", "Principal", "Balance")
+    return(paymentDf)
 }
 
 shinyServer(function(input, output){
-    dfa <- reactive({
-        getAmortTable(input$principal, input$rate, input$period, 
-            input$cur_date, input$start_date, input$pfreq, input$cfreq)
-    })
     
     output$emival <- renderPrint({
-        dfa()
+        getAmortTable(input$principal, input$rate, input$period, 
+            input$cur_date, input$start_date, input$pfreq, input$cfreq)
     })    
     
 })

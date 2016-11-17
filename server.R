@@ -1,9 +1,9 @@
 library(shiny)
 
 #Function to calculate NPV value            
-npv <- function(cur_date, epi_val, gen_seq, rate, cfreq){
+npv <- function(cur_date, epi_val, pmt_dates, rate, cfreq){
     net_present_value <- 0
-    days_diff <- as.integer(gen_seq - cur_date)
+    days_diff <- as.integer(pmt_dates - cur_date)
     for(i in days_diff){
         disc_amt <- epi_val / ((1 + rate/cfreq) ** (i/(365.25/cfreq)))
         net_present_value <- net_present_value + disc_amt
@@ -11,80 +11,91 @@ npv <- function(cur_date, epi_val, gen_seq, rate, cfreq){
     return(net_present_value)
 }
 
-npvc <- function(cur_date, epi_val, gen_seq, rate, cfreq){
+npvc <- function(cur_date, epi_val, pmt_dates, rate, cfreq){
     net_present_value <- 0
-    days_diff <- as.integer(gen_seq - cur_date)
+    days_diff <- as.integer(pmt_dates - cur_date)
     for(i in days_diff){
         disc_amt <- epi_val / exp(rate * i/365.25)
         net_present_value <- net_present_value + disc_amt
     }
     return(net_present_value)
 }
-    
-shinyServer(function(input, output){
 
-    cfreq <- reactive({
-        switch(input$cfreq,
-            conti = 0,
-            day = 365.25,
-            week = 365/7,
-            month = 12,
-            quart = 4,
-            year = 1,
-            1)
-    })
+compoundingFreq <- function(freqStr){
+    return(switch(freqStr,
+        conti = 0,
+        day = 365.25,
+        week = 365/7,
+        month = 12,
+        quart = 4,
+        year = 1,
+        1))
+}
+
+paymentFreq <- function(freqStr){
+    return(switch(freqStr,
+        day = "1 day",
+        week = "1 week",
+        month = "1 month",
+        quart = "3 months",
+        year = "1 year",
+        "1 year"))
+}   
+
+npvfn <- function(freqStr){
+    return(switch(freqStr, conti = npvc, npv))
+}
+
+getAmortTable <- function(principal, rate, period, cur_date, start_date, 
+    pmt_freq, comp_freq){
+    prin <- as.double(principal)
+    rate <- as.double(rate) / 100
+    period <- as.double(period)
+    cur_date <- as.Date(cur_date, format = "%d/%m/%Y")
     
-    pfreq <- reactive({
-        switch(input$pfreq,
-            day = "1 day",
-            week = "1 week",
-            month = "1 month",
-            quart = "3 months",
-            year = "1 year",
-            "1 year")
-    })    
+    start_date <- as.Date(start_date, format = "%d/%m/%Y")
+    end_date <- start_date + period * 365.25 - 1
+    pmt_dates <- seq(start_date, end_date, by=paymentFreq(pmt_freq))
+ 
+    min_epi <- 0
+    max_epi <- prin
+
+    min_npv_val <- npvfn(comp_freq)(cur_date, min_epi, pmt_dates, 
+        rate, compoundingFreq(comp_freq))
+    max_npv_val <- npvfn(comp_freq)(cur_date, max_epi, pmt_dates, 
+        rate, compoundingFreq(comp_freq))
     
-    npvfn <- reactive({
-        switch(input$cfreq,
-               conti = npvc,
-               npv)
-    })
-    
-    amortTable <- reactive({
-        prin <- as.double(input$principal)
-        rate <- as.double(input$rate) / 100
-        period <- as.double(input$period)
-        cur_date <- as.Date(input$cur_date, format = "%d/%m/%Y")
+    while(abs(min_npv_val - prin) > 0.001){
+        mid_epi <- (min_epi + max_epi)/2
+
+        leftdiff <- abs(prin - min_npv_val)
+        rightdiff <- abs(max_npv_val - prin)
         
-        start_date <- as.Date(input$start_date, format = "%d/%m/%Y")
-        end_date <- start_date + period * 365.25 - 1
-        gen_seq <- seq(start_date, end_date, by=pfreq())
-     
-        min_epi <- 0
-        max_epi <- prin
-
-        min_npv_val <- npvfn()(cur_date, min_epi, gen_seq, rate, cfreq())
-        max_npv_val <- npvfn()(cur_date, max_epi, gen_seq, rate, cfreq())
-        
-        while(abs(min_npv_val - prin) > 0.001){
-            mid_epi <- (min_epi + max_epi)/2
-
-            leftdiff <- abs(prin - min_npv_val)
-            rightdiff <- abs(max_npv_val - prin)
-            
-            if(leftdiff < rightdiff){
-                max_epi <- mid_epi
-                max_npv_val <- npvfn()(cur_date, max_epi, gen_seq, rate, cfreq())
-            } else {
-                min_epi <- mid_epi
-                min_npv_val <- npvfn()(cur_date, min_epi, gen_seq, rate, cfreq())
-            }
+        if(leftdiff < rightdiff){
+            max_epi <- mid_epi
+            max_npv_val <- npvfn(comp_freq)(cur_date, max_epi, pmt_dates, rate, 
+                compoundingFreq(comp_freq))
+        } else {
+            min_epi <- mid_epi
+            min_npv_val <- npvfn(comp_freq)(cur_date, min_epi, pmt_dates, rate, 
+                compoundingFreq(comp_freq))
         }
-        data.frame(Date = gen_seq, Instalment = rep(mid_epi, length(gen_seq)))
+    }
+    data.frame(Date = pmt_dates, Instalment = rep(mid_epi, length(pmt_dates)))
+    allDates <- c(cur_date, pmt_dates)
+    interestDays <- diff(allDates)
+}
+
+shinyServer(function(input, output){
+    dfa <- reactive({
+        getAmortTable(input$principal, input$rate, input$period, 
+            input$cur_date, input$start_date, input$pfreq, input$cfreq)
     })
     
     output$emival <- renderPrint({
-        amortTable()
+        dfa()
     })    
     
 })
+
+# getAmortTable(100000, 8, 10, "17/11/2016", "17/11/2016", "month", "month")

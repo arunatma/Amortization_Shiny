@@ -1,6 +1,8 @@
 library(shiny)
+library(ggplot2)
+library(plotly)
+library(data.table)
 
-#Function to calculate NPV value            
 npv <- function(cur_date, epi_val, pmt_dates, rate, cfreq){
     net_present_value <- 0
     days_diff <- as.integer(pmt_dates - cur_date)
@@ -112,13 +114,29 @@ getAmortTable <- function(principal, rate, period, cur_date, start_date,
     return(paymentDf)
 }
 
+amortTable <- data.table()
 shinyServer(function(input, output){
-    
-    output$emival <- renderPrint({
+    amortTable <- reactive({
         getAmortTable(input$principal, input$rate, input$period, 
             input$cur_date, input$start_date, input$pfreq, input$cfreq)
-    })    
+    })
     
+    output$emival <- renderPrint({
+        amortTable()
+    })
+    
+    output$amortPlot <- renderPlotly({
+        amortDt <- data.table(amortTable())
+        if(input$showBalance){
+            graphTable <- amortDt
+        } else {
+            graphTable <- amortDt[, !c("Balance"), with=FALSE]
+        }
+        
+        amortTableLong <- melt(graphTable, id="Date")  
+        gg <- ggplot(data=amortTableLong, aes(x=Date, y=value, colour=variable)) + geom_line()
+        p <- ggplotly(gg)    
+    })
 })
 
 # getAmortTable(100000, 8, 10, "17/11/2016", "17/11/2016", "month", "month")

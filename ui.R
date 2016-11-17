@@ -1,4 +1,6 @@
 library(shiny)
+library(ggplot2)
+library(plotly)
 
 shinyUI(pageWithSidebar(
     headerPanel("Loan Amortization"),
@@ -32,7 +34,10 @@ shinyUI(pageWithSidebar(
     
     mainPanel(
         tabsetPanel(
-            tabPanel("Equated Periodic Instalment", verbatimTextOutput("emival"))
+            tabPanel("Equated Periodic Instalment", verbatimTextOutput("emival")),
+            tabPanel("Amortization Visualization", 
+                radioButtons("showBalance", "Show Balance?", c("No"=FALSE, "Yes"=TRUE)),
+                plotlyOutput("amortPlot"))
         )
     )
 ))
